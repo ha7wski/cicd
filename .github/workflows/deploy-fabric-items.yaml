@@ -29,7 +29,7 @@ jobs:
         id: workspace
         run: |
           ENV="${{ inputs.environment }}"
-          echo "name=[HANDS-ON] {trigram-name} Workspace - ${ENV^^}" >> "$GITHUB_OUTPUT"
+          echo "name=[HANDS-ON] hh Workspace - ${ENV^^}" >> "$GITHUB_OUTPUT"
 
       - name: Install fab CLI
         run: |
