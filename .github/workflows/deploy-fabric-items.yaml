@@ -1,0 +1,69 @@
+name: Deploy Microsoft Fabric Items
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - dev
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  deploy-notebooks:
+    name: Deploy Notebooks (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+    
+      - name: Set workspace name
+        id: workspace
+        run: |
+          ENV="${{ inputs.environment }}"
+          echo "name=[HANDS-ON] {trigram-name} Workspace - ${ENV^^}" >> "$GITHUB_OUTPUT"
+
+      - name: Install fab CLI
+        run: |
+          pip install ms-fabric-cli
+
+      - name: Login to Microsoft Fabric
+        run: |
+          fab config set encryption_fallback_enabled true
+          fab auth login \
+            -u ${{ secrets.SPN_CLIENT_ID }} \
+            -p ${{ secrets.SPN_CLIENT_SECRET }} \
+            --tenant ${{ secrets.SPN_TENANT_ID }}
+
+      - name: Deploy Fabric Items
+        run: |
+          lakehouse_name="lkh_${{ inputs.environment }}_hands_on"
+          notebook_name="nb_demo"
+
+          workspace_id=$(fab get "/${{ steps.workspace.outputs.name }}.Workspace/" --output_format text -q id | tr -d '\r')
+          lakehouse_id=$(fab get "/${{ steps.workspace.outputs.name }}.Workspace/${lakehouse_name}.Lakehouse" --output_format text -q id | tr -d '\r') 
+          attachment_payload=$(jq -cn \
+            --arg lakehouse_id "${lakehouse_id}" \
+            --arg lakehouse_name "${lakehouse_name}" \
+            --arg workspace_id "${workspace_id}" \
+            '{
+              known_lakehouses: [{id: $lakehouse_id}],
+              default_lakehouse: $lakehouse_id,
+              default_lakehouse_name: $lakehouse_name,
+              default_lakehouse_workspace_id: $workspace_id
+            }')
+          fab import "/${{ steps.workspace.outputs.name }}.Workspace/${notebook_name}.Notebook" \
+            -i src/fabric/${notebook_name}.Notebook \
+            -f --format .py
+          fab set "/${{ steps.workspace.outputs.name }}.Workspace/${notebook_name}.Notebook" \
+            -q lakehouse \
+            -i "${attachment_payload}" \
+            -f
