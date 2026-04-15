@@ -1,0 +1,28 @@
+name: 'Azure Login with Service Principal'
+description: 'Login to Azure using service principal credentials'
+
+inputs:
+  client_id:
+    description: 'Azure service principal client ID'
+    required: true
+  client_secret:
+    description: 'Azure service principal client secret'
+    required: true
+  tenant_id:
+    description: 'Azure tenant ID'
+    required: true
+  subscription_id:
+    description: 'Azure subscription ID'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Azure Login
+      shell: bash
+      run: |
+        az login --service-principal \
+          -u ${{ inputs.client_id }} \
+          -p ${{ inputs.client_secret }} \
+          --tenant ${{ inputs.tenant_id }}
+        az account set --subscription ${{ inputs.subscription_id }}

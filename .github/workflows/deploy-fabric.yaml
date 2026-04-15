@@ -1,0 +1,98 @@
+name: Deploy Microsoft Fabric
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+env:
+  TF_WORKING_DIR: terraform/
+  ARM_CLIENT_ID: ${{ secrets.SPN_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.SPN_CLIENT_SECRET }}
+  ARM_TENANT_ID: ${{ secrets.SPN_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.SPN_SUBSCRIPTION_ID }}
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: ./.github/actions/authentication
+        with:
+          client_id: ${{ secrets.SPN_CLIENT_ID }}
+          client_secret: ${{ secrets.SPN_CLIENT_SECRET }}
+          tenant_id: ${{ secrets.SPN_TENANT_ID }}
+          subscription_id: ${{ secrets.SPN_SUBSCRIPTION_ID }}
+      
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="key=backend_dev.tfstate"
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform validate
+
+            - name: Terraform Plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform plan -out=tfplan -input=false
+
+      - name: Upload Terraform Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_WORKING_DIR }}/tfplan
+          retention-days: 1
+
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    needs: terraform-plan
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: ./.github/actions/authentication
+        with:
+          client_id: ${{ secrets.SPN_CLIENT_ID }}
+          client_secret: ${{ secrets.SPN_CLIENT_SECRET }}
+          tenant_id: ${{ secrets.SPN_TENANT_ID }}
+          subscription_id: ${{ secrets.SPN_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.8"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="key=backend_dev.tfstate"
+
+      - name: Download Terraform Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_WORKING_DIR }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform apply -input=false tfplan
+
